@@ -42,6 +42,13 @@ class YaDisk(FileExplorerInterface):
         pass
 
     def file_exists(self, dist_path: str) -> bool:
+        """
+        :param dist_path: path to the file on Yandex disk
+        :return: True if directory with path dist_path exists, else returns False
+
+        Throws:
+        - **InvalidTokenError**, if your token is not valid
+        """
         response = requests.request(method='GET',
                                     url=f'https://cloud-api.yandex.net/v1/disk/resources?path=disk:/{dist_path}',
                                     headers=self._get_headers())
@@ -55,6 +62,13 @@ class YaDisk(FileExplorerInterface):
             return False
 
     def dir_exists(self, dist_path: str) -> bool:
+        """
+        :param dist_path: path to the dir on Yandex disk
+        :return: True if directory with path dist_path exists, else returns False
+
+        Throws:
+        - **InvalidTokenError**, if your token is not valid
+        """
         response = requests.request(method='GET',
                                     url=f'https://cloud-api.yandex.net/v1/disk/resources?path=disk:/{dist_path}',
                                     headers=self._get_headers())
