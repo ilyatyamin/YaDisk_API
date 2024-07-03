@@ -48,14 +48,24 @@ class YaDisk(FileExplorerInterface):
         info = self._process_str_to_dict(response.text)
 
         if response.status_code == 200:
-            return True
+            return info.get('type') == 'file'
         elif response.status_code == 401:
             raise InvalidTokenError(additional_info=info['message'])
         else:
             return False
 
-    def dir_exists(self, dist_path):
-        pass
+    def dir_exists(self, dist_path: str) -> bool:
+        response = requests.request(method='GET',
+                                    url=f'https://cloud-api.yandex.net/v1/disk/resources?path=disk:/{dist_path}',
+                                    headers=self._get_headers())
+        info = self._process_str_to_dict(response.text)
+
+        if response.status_code == 200:
+            return info.get('type') == 'dir'
+        elif response.status_code == 401:
+            raise InvalidTokenError(additional_info=info['message'])
+        else:
+            return False
 
     def move_file(self, src_path, dst_path):
         pass
