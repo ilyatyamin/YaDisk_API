@@ -5,12 +5,22 @@ from yadisk.exceptions.ServerError import *
 from yadisk.exceptions.InvalidTokenError import *
 from yadisk.exceptions.IncorrectDataError import *
 
-class GetLinkTest(unittest.TestCase):
+class Tests(unittest.TestCase):
     def setUp(self):
         self.disk = YaDisk(OAUTH_TOKEN)
         self.not_corr_disk = YaDisk(OAUTH_TOKEN + 'abcde')
 
-    def test_ok(self):
+    def test_fileexists(self):
+        self.assertTrue(self.disk.file_exists('Мишки.jpg'))
+        self.assertTrue(self.disk.file_exists('images/image.HEIC'))
+
+        self.assertFalse(self.disk.file_exists('STRANGE_FOLDER/StRanGe.File'))
+
+        with self.assertRaises(InvalidTokenError):
+            self.not_corr_disk.file_exists('some data')
+
+
+    def test_getlink(self):
         # main.cpp exists in repo
         self.assertNotEquals(self.disk.get_link('main.cpp'), None)
         self.assertIsInstance(self.disk.get_link('main.cpp'), str)
