@@ -41,8 +41,15 @@ class YaDisk(FileExplorerInterface):
     def delete_directory(self, dist_path):
         pass
 
-    def file_exists(self, dist_path):
-        pass
+    def file_exists(self, dist_path: str) -> bool:
+        response = requests.request(method='GET',
+                                    url=f'https://cloud-api.yandex.net/v1/disk/resources?path=disk:/{dist_path}',
+                                    headers=self._get_headers())
+
+        if response.status_code == 200:
+            return True
+        else:
+            return False
 
     def dir_exists(self, dist_path):
         pass
