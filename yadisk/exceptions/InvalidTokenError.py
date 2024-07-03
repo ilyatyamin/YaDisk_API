@@ -1,4 +1,4 @@
-class InvalidTokenException(Exception):
+class InvalidTokenError(Exception):
     def __init__(self, additional_info = None):
         self.additional = additional_info
 
