@@ -1,4 +1,5 @@
 import unittest
+
 from consts import *
 from yadisk.yandex_disk import *
 from yadisk.exceptions.ServerError import *
@@ -58,6 +59,41 @@ class Tests(unittest.TestCase):
 
         with self.assertRaises(FileNotFoundError):
             self.disk.get_link('NOT_EXISTED_FILE.SOME_DATA')
+
+    def test_move_files(self):
+        # Real files, can be moved
+        self.assertIsInstance(self.disk.move_file('TicketRepository.png', 'folder_new/TicketRepository.png'), str)
+        self.assertIsInstance(self.disk.move_file('folder_new/TicketRepository.png', 'TicketRepository.png'), str)
+
+        with self.assertRaises(IncorrectDataError):
+            # src not exists
+            self.disk.move_file('UNKNOWED_FOLDER/UNKNOWN_FILE', 'images/')
+
+        with self.assertRaises(IncorrectDataError):
+            # dst not exists
+            self.disk.move_file( 'images/', 'UNKNOWED_FOLDER/UNKNOWN_FILE')
+
+        with self.assertRaises(InvalidTokenError):
+            self.not_corr_disk.move_file('TicketRepository.png', 'folder_new/TicketRepository.png')
+
+        # Real files, can be moved
+        self.assertIsInstance(self.disk.move_file('Море.jpg', 'folder/Море.jpg'), str)
+        self.assertIsInstance(self.disk.move_file('folder/Море.jpg', 'Море.jpg', False), str)
+        self.assertIsInstance(self.disk.move_file('Москва.jpg', 'folder/yet_one_folder/Москва.jpg'), str)
+        self.assertIsInstance(self.disk.move_file('folder/yet_one_folder/Москва.jpg', 'Москва.jpg'), str)
+
+        # Test overwriting
+        with self.assertRaises(IncorrectDataError):
+            self.disk.move_file('Зима.jpg', 'images/Зима.jpg', False)
+
+        # Move dirs (can be moved)
+        self.assertIsInstance(self.disk.move_file('folder', 'folder_new/folder'), str)
+        # # with moving dirs all files was moved
+        # self.assertTrue(self.disk.dir_exists('folder_new/folder/yet_one_folder'))
+        # with moving files all previous files was saved
+        self.assertTrue(self.disk.file_exists('folder_new/SessionRepository.png'))
+        # move back
+        self.assertIsInstance(self.disk.move_file('folder_new/folder', 'folder'), str)
 
 
 if __name__ == '__main__':

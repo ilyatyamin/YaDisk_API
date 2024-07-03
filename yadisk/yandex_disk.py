@@ -67,6 +67,7 @@ class YaDisk(FileExplorerInterface):
         :return: True if directory with path dist_path exists, else returns False
 
         Throws:
+
         - **InvalidTokenError**, if your token is not valid
         """
         response = requests.request(method='GET',
@@ -81,8 +82,35 @@ class YaDisk(FileExplorerInterface):
         else:
             return False
 
-    def move_file(self, src_path, dst_path):
-        pass
+    def move_file(self, src_path: str, dst_path: str,
+                  overwrite_allowed: bool = True) -> str:
+        """
+        Moves a file from one location to another.
+        :param src_path: path where the folder or file is currently located
+        :param dst_path: path where you want to move the folder or file
+        :param overwrite_allowed: True if overwriting is allowed else False
+        :return: new link to an object on Yandex Disk
+
+        Throws:
+
+        - **InvalidTokenError**, if your token is not valid
+        - **IncorrectDataError**, if your data is incorrect (path is incorrect, the size of file / dir if too high, etc.)
+        - **ServerError** in other cases
+        """
+        response = requests.request(method='POST',
+                                    url=f'https://cloud-api.yandex.net/v1/disk/resources/move?from={src_path}&path={dst_path}&overwrite={self._bool_to_str(overwrite_allowed)}',
+                                    headers=self._get_headers())
+        info = self._process_str_to_dict(response.text)
+
+        if str(response.status_code)[0] == '2':  # 200, 201, 202, ...
+            return info.get('href', None)
+        elif str(response.status_code)[0] == '4' and response.status_code != 401:  # 400, 403, 406...
+            raise IncorrectDataError(error_name=info.get('error', None),
+                                     additional_info=info.get('message', None))
+        elif response.status_code == 401:
+            raise InvalidTokenError(additional_info=info['message'])
+        else:
+            raise ServerError(info['message'])
 
     def get_link(self, dist_path):
         """
@@ -128,5 +156,13 @@ class YaDisk(FileExplorerInterface):
             'Authorization': f'OAuth {self.__oauth_token__}'
         }
 
-    def _process_str_to_dict(self, raw_data: str) -> Dict[str, str]:
+    @staticmethod
+    def _process_str_to_dict(raw_data: str) -> Dict[str, str]:
         return json.loads(raw_data)
+
+    @staticmethod
+    def _bool_to_str(value: bool) -> str:
+        if value:
+            return "true"
+        else:
+            return "false"
