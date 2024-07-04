@@ -35,8 +35,24 @@ class YaDisk(FileExplorerInterface):
     def make_folder(self, dist_path):
         pass
 
-    def delete_file(self, dist_path):
-        pass
+    def delete_file(self, dist_path: str,
+                    permanently: bool = False):
+        """
+        :param dist_path: path to a file on Yandex Disk that should be deleted
+        :param permanently: should the file be deleted permanently (without placing it in the trash) or not?
+
+        Throws:
+
+        - **InvalidTokenError**, if your token is not valid
+        - **IncorrectDataError**, if your data is incorrect (a path is incorrect, the size of file / dir if too high, etc.)
+        - **ServerError** in other cases
+        """
+
+        # Check that this directory exists (and it is a directory, not file)
+        if not self.file_exists(dist_path):
+            raise IncorrectDataError(additional_info="This file doesn't exists.")
+
+        self._delete_inner(dist_path, permanently)
 
     def create_directory(self, dist_path: str) -> str:
         """
@@ -83,32 +99,22 @@ class YaDisk(FileExplorerInterface):
         if not self.dir_exists(dist_path):
             raise IncorrectDataError(additional_info="This directory doesn't exists.")
 
-        response = requests.request(method='DELETE',
-                                    url=f'https://cloud-api.yandex.net/v1/disk/resources?path=disk:/{dist_path}&permanently={self._bool_to_str(permanently)}',
-                                    headers=self._get_headers())
-        if str(response.status_code)[0] == '2':  # 202, 204...
-            return
-        elif str(response.status_code)[0] == '4' and response.status_code != 401:  # 400, 403, 406...
-            info = self._process_str_to_dict(response.text)
-            raise IncorrectDataError(error_name=info.get('error', None),
-                                     additional_info=info.get('message', None))
-        elif response.status_code == 401:
-            info = self._process_str_to_dict(response.text)
-            raise InvalidTokenError(additional_info=info.get('message', None))
-        else:
-            info = self._process_str_to_dict(response.text)
-            raise ServerError(info.get('message', None))
+        self._delete_inner(dist_path, permanently)
 
-    def file_exists(self, dist_path: str) -> bool:
+    def file_exists(self, dist_path: str,
+                    file_in_trash: bool = False) -> bool:
         """
         :param dist_path: path to the file on Yandex disk
+        :param file_in_trash: True, if you need to search for a file in the Yandex Disk trash
         :return: True if directory with path dist_path exists, else returns False
 
         Throws:
         - **InvalidTokenError**, if your token is not valid
         """
+
+        addition = '' if not file_in_trash else 'trash/'
         response = requests.request(method='GET',
-                                    url=f'https://cloud-api.yandex.net/v1/disk/resources?path=disk:/{dist_path}',
+                                    url=f'https://cloud-api.yandex.net/v1/disk/{addition}resources?path=disk:/{dist_path}',
                                     headers=self._get_headers())
         info = self._process_str_to_dict(response.text)
 
@@ -119,17 +125,21 @@ class YaDisk(FileExplorerInterface):
         else:
             return False
 
-    def dir_exists(self, dist_path: str) -> bool:
+    def dir_exists(self, dist_path: str,
+                   dir_in_trash: bool = False) -> bool:
         """
         :param dist_path: path to the dir on Yandex disk
+        :param dir_in_trash: True, if you need to search for a directory in the Yandex Disk trash
         :return: True if directory with path dist_path exists, else returns False
 
         Throws:
 
         - **InvalidTokenError**, if your token is not valid
         """
+
+        addition = '' if not dir_in_trash else 'trash/'
         response = requests.request(method='GET',
-                                    url=f'https://cloud-api.yandex.net/v1/disk/resources?path=disk:/{dist_path}',
+                                    url=f'https://cloud-api.yandex.net/v1/disk/{addition}resources?path=disk:/{dist_path}',
                                     headers=self._get_headers())
         info = self._process_str_to_dict(response.text)
 
@@ -207,6 +217,27 @@ class YaDisk(FileExplorerInterface):
         self.__oauth_token__ = token
         if not isinstance(token, str):
             raise InvalidTokenError()
+
+    def _delete_inner(self, dist_path: str, permanently: bool) -> None:
+        """
+        In Yandex API call for deleting files and directories, it is the same
+        :return: None, or exception
+        """
+        response = requests.request(method='DELETE',
+                                    url=f'https://cloud-api.yandex.net/v1/disk/resources?path=disk:/{dist_path}&permanently={self._bool_to_str(permanently)}',
+                                    headers=self._get_headers())
+        if str(response.status_code)[0] == '2':  # 202, 204...
+            return
+        elif str(response.status_code)[0] == '4' and response.status_code != 401:  # 400, 403, 406...
+            info = self._process_str_to_dict(response.text)
+            raise IncorrectDataError(error_name=info.get('error', None),
+                                     additional_info=info.get('message', None))
+        elif response.status_code == 401:
+            info = self._process_str_to_dict(response.text)
+            raise InvalidTokenError(additional_info=info.get('message', None))
+        else:
+            info = self._process_str_to_dict(response.text)
+            raise ServerError(info.get('message', None))
 
     def _get_headers(self):
         return {
