@@ -3,4 +3,4 @@ from yadisk.yandex_disk import *
 
 disk = YaDisk(consts.OAUTH_TOKEN)
 
-print(disk.move_file('folder_new/folder', 'folder'))
+print(disk.create_directory('empty_folder/'))

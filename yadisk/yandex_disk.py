@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict
 
 import requests
 import json
@@ -38,8 +38,66 @@ class YaDisk(FileExplorerInterface):
     def delete_file(self, dist_path):
         pass
 
-    def delete_directory(self, dist_path):
-        pass
+    def create_directory(self, dist_path: str) -> str:
+        """
+        This is an additional method for testing.
+        Maybe it can be useful in the future.
+        :param dist_path: Path to a directory on Yandex Disk that should be created
+        :return: link to an object on Yandex Disk
+
+        Throws:
+
+        - **InvalidTokenError**, if your token is not valid
+        - **IncorrectDataError**, if your data is incorrect (a path is incorrect, the size of file / dir if too high, etc.)
+        - **ServerError** in other cases
+        """
+        response = requests.request(method='PUT',
+                                    url=f'https://cloud-api.yandex.net/v1/disk/resources?path=disk:/{dist_path}',
+                                    headers=self._get_headers())
+        info = self._process_str_to_dict(response.text)
+
+        if str(response.status_code)[0] == '2':  # 200, 201, 202, 204...
+            return info.get('href', None)
+        elif str(response.status_code)[0] == '4' and response.status_code != 401:  # 400, 403, 406...
+            raise IncorrectDataError(error_name=info.get('error', None),
+                                     additional_info=info.get('message', None))
+        elif response.status_code == 401:
+            raise InvalidTokenError(additional_info=info.get('message', None))
+        else:
+            raise ServerError(info.get('message', None))
+
+    def delete_directory(self, dist_path: str,
+                         permanently: bool = False):
+        """
+        :param dist_path: path to a directory on Yandex Disk that should be deleted
+        :param permanently: should the dir be deleted permanently (without placing it in the trash) or not?
+
+        Throws:
+
+        - **InvalidTokenError**, if your token is not valid
+        - **IncorrectDataError**, if your data is incorrect (a path is incorrect, the size of file / dir if too high, etc.)
+        - **ServerError** in other cases
+        """
+
+        # Check that this directory exists (and it is a directory, not file)
+        if not self.dir_exists(dist_path):
+            raise IncorrectDataError(additional_info="This directory doesn't exists.")
+
+        response = requests.request(method='DELETE',
+                                    url=f'https://cloud-api.yandex.net/v1/disk/resources?path=disk:/{dist_path}&permanently={self._bool_to_str(permanently)}',
+                                    headers=self._get_headers())
+        if str(response.status_code)[0] == '2':  # 202, 204...
+            return
+        elif str(response.status_code)[0] == '4' and response.status_code != 401:  # 400, 403, 406...
+            info = self._process_str_to_dict(response.text)
+            raise IncorrectDataError(error_name=info.get('error', None),
+                                     additional_info=info.get('message', None))
+        elif response.status_code == 401:
+            info = self._process_str_to_dict(response.text)
+            raise InvalidTokenError(additional_info=info.get('message', None))
+        else:
+            info = self._process_str_to_dict(response.text)
+            raise ServerError(info.get('message', None))
 
     def file_exists(self, dist_path: str) -> bool:
         """
@@ -57,7 +115,7 @@ class YaDisk(FileExplorerInterface):
         if response.status_code == 200:
             return info.get('type') == 'file'
         elif response.status_code == 401:
-            raise InvalidTokenError(additional_info=info['message'])
+            raise InvalidTokenError(additional_info=info.get('message', None))
         else:
             return False
 
@@ -78,7 +136,7 @@ class YaDisk(FileExplorerInterface):
         if response.status_code == 200:
             return info.get('type') == 'dir'
         elif response.status_code == 401:
-            raise InvalidTokenError(additional_info=info['message'])
+            raise InvalidTokenError(additional_info=info.get('message', None))
         else:
             return False
 
@@ -108,9 +166,9 @@ class YaDisk(FileExplorerInterface):
             raise IncorrectDataError(error_name=info.get('error', None),
                                      additional_info=info.get('message', None))
         elif response.status_code == 401:
-            raise InvalidTokenError(additional_info=info['message'])
+            raise InvalidTokenError(additional_info=info.get('message', None))
         else:
-            raise ServerError(info['message'])
+            raise ServerError(info.get('message', None))
 
     def get_link(self, dist_path):
         """
@@ -129,20 +187,21 @@ class YaDisk(FileExplorerInterface):
                                     url=f'https://cloud-api.yandex.net/v1/disk/resources?path=disk:/{dist_path}',
                                     headers=self._get_headers())
         info = self._process_str_to_dict(response.text)
+
         if response.status_code == 200:
             if 'public_url' in info:
-                return info['public_url']
+                return info.get('public_url', None)
             else:
                 raise ServerError("This file doesn't have public link.")
         elif response.status_code == 400:
-            raise IncorrectDataError(error_name=info['error'],
-                                     additional_info=info['message'])
+            raise IncorrectDataError(error_name=info.get('error', None),
+                                     additional_info=info.get('message', None))
         elif response.status_code == 401:
-            raise InvalidTokenError(additional_info=info['message'])
+            raise InvalidTokenError(additional_info=info.get('message', None))
         elif response.status_code == 404:
-            raise FileNotFoundError(info['message'])
+            raise FileNotFoundError(info.get('message', None))
         else:
-            raise ServerError(info['message'])
+            raise ServerError(info.get('message', None))
 
     def _auth(self, token):
         self.__oauth_token__ = token
@@ -158,7 +217,10 @@ class YaDisk(FileExplorerInterface):
 
     @staticmethod
     def _process_str_to_dict(raw_data: str) -> Dict[str, str]:
-        return json.loads(raw_data)
+        try:
+            return json.loads(raw_data)
+        except Exception:
+            return {}
 
     @staticmethod
     def _bool_to_str(value: bool) -> str:

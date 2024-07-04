@@ -1,3 +1,4 @@
+import time
 import unittest
 
 from consts import *
@@ -94,6 +95,34 @@ class Tests(unittest.TestCase):
         self.assertTrue(self.disk.file_exists('folder_new/SessionRepository.png'))
         # move back
         self.assertIsInstance(self.disk.move_file('folder_new/folder', 'folder'), str)
+
+    def test_delete_create_dir(self):
+        # Real directory can be deleted
+        self.assertIsNone(self.disk.delete_directory('empty_folder/'))
+        time.sleep(1) # because deleting dir can be not fast
+        # Recreate directory
+        self.assertIsInstance(self.disk.create_directory('empty_folder/'), str)
+
+        # Fake directories, check exceptions
+        with self.assertRaises(IncorrectDataError):
+            self.disk.delete_directory('NOT REAL DIRECTORY/')
+
+        # Fake directory, path to file
+        with self.assertRaises(IncorrectDataError):
+            self.disk.delete_directory('Зима.jpg')
+
+        # Incorrect token check
+        with self.assertRaises(InvalidTokenError):
+            self.not_corr_disk.delete_directory('empty_folder/')
+
+        # Check permanent deleting
+        self.disk.delete_directory('empty_folder/', permanently=True)
+        time.sleep(1)
+        self.assertIsInstance(self.disk.create_directory('empty_folder/'), str)
+
+        # Strange test
+        with self.assertRaises(IncorrectDataError):
+            self.disk.delete_directory('empty_folder'*10**4 + '/') # 400 error, because the name is too long
 
 
 if __name__ == '__main__':
