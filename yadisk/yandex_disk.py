@@ -1,7 +1,8 @@
-from typing import Dict
+from typing import Dict, Optional
 
 import requests
 import json
+import tqdm
 from flask import Flask
 from yadisk.__constants import *
 from yadisk.__interface import *
@@ -29,11 +30,50 @@ class YaDisk(FileExplorerInterface):
     def upload_file(self, loc_path, dist_path):
         pass
 
-    def download_file(self, dist_path, loc_path):
-        pass
+    def download_file(self, dist_path: str, loc_path: str,
+                      tqdm_enabled: bool = True):
+        """
+        :param dist_path: path to a file on Yandex Disk that should be downloaded
+        :param loc_path: the path where you want to save the file on local disk
+        :param tqdm_enabled: is it necessary to show a loading slider?
+        :return: None
 
-    def make_folder(self, dist_path):
-        pass
+        Download file on local disk. Notice that folders will be downloaded as zip archive.
+
+        Throws:
+
+        - **InvalidTokenError**, if your token is not valid
+        - **IncorrectDataError**, if your data is incorrect (a path is incorrect, the size of file / dir if too high, etc.)
+        - **ServerError** in other cases
+        """
+        # 0. Check a content type
+        content_name = self._get_name_for_downloading(dist_path)
+
+        # 1. Get download link
+        response = requests.request(method='GET',
+                                    url=f'https://cloud-api.yandex.net/v1/disk/resources/download?path={dist_path}',
+                                    headers=self._get_headers())
+        info = self._process_str_to_dict(response.text)
+
+        if response.status_code == 200:
+            link = info['href']
+        elif str(response.status_code)[0] == '4' and response.status_code != 401:  # 400, 403, 406...
+            raise IncorrectDataError(error_name=info.get('error', None),
+                                     additional_info=info.get('message', None))
+        elif response.status_code == 401:
+            raise InvalidTokenError(additional_info=info.get('message', None))
+        else:
+            raise ServerError(info.get('message', None))
+
+        # 2. Download to localhost
+        download_response = requests.get(url=link, stream=True)
+        with open(loc_path + '/'  + content_name, mode='wb') as saved_file:
+            if tqdm_enabled:
+                for chunk in tqdm.tqdm(download_response.iter_content(chunk_size=1024)):
+                    saved_file.write(chunk)
+            else:
+                for chunk in download_response.iter_content(chunk_size=1024):
+                    saved_file.write(chunk)
 
     def delete_file(self, dist_path: str,
                     permanently: bool = False):
@@ -54,10 +94,47 @@ class YaDisk(FileExplorerInterface):
 
         self._delete_inner(dist_path, permanently)
 
-    def create_directory(self, dist_path: str) -> str:
+    def restore_from_trash_bin(self, dist_path: str,
+                               new_name: Optional[str] = None,
+                               overwrite_allowed: bool = False) -> str:
         """
-        This is an additional method for testing.
-        Maybe it can be useful in the future.
+        Not necessary method, maybe can be useful in the future, now it needs for the testing purposes
+        :param dist_path: path to file or folder on Yandex.Disk in trash bin that should be restored
+        :param new_name: new name of restored file (optional)
+        :param overwrite_allowed: True if overwriting is allowed else False
+        :return: link to the restored object on Yandex Disk
+
+        TODO: not works now, because file has different name in disk and trash bin [FIX]
+
+        Throws:
+
+        - **InvalidTokenError**, if your token is not valid
+        - **IncorrectDataError**, if your data is incorrect (a path is incorrect, the size of file / dir if too high, etc.)
+        - **ServerError** in other cases
+        """
+        if new_name is None:
+            response = requests.request(method='PUT',
+                                        url=f'https://cloud-api.yandex.net/v1/disk/trash/resources/restore?path={dist_path}&overwrite={self._bool_to_str(overwrite_allowed)}',
+                                        headers=self._get_headers())
+            info = self._process_str_to_dict(response.text)
+        else:
+            response = requests.request(method='PUT',
+                                        url=f'https://cloud-api.yandex.net/v1/disk/trash/resources/restore?path={dist_path}&name={new_name}&overwrite={self._bool_to_str(overwrite_allowed)}',
+                                        headers=self._get_headers())
+            info = self._process_str_to_dict(response.text)
+
+        if str(response.status_code)[0] == '2':  # 200, 201, 202, 204...
+            return info.get('href', None)
+        elif str(response.status_code)[0] == '4' and response.status_code != 401:  # 400, 403, 406...
+            raise IncorrectDataError(error_name=info.get('error', None),
+                                     additional_info=info.get('message', None))
+        elif response.status_code == 401:
+            raise InvalidTokenError(additional_info=info.get('message', None))
+        else:
+            raise ServerError(info.get('message', None))
+
+    def make_folder(self, dist_path: str) -> str:
+        """
         :param dist_path: Path to a directory on Yandex Disk that should be created
         :return: link to an object on Yandex Disk
 
@@ -68,7 +145,7 @@ class YaDisk(FileExplorerInterface):
         - **ServerError** in other cases
         """
         response = requests.request(method='PUT',
-                                    url=f'https://cloud-api.yandex.net/v1/disk/resources?path=disk:/{dist_path}',
+                                    url=f'https://cloud-api.yandex.net/v1/disk/resources?path={dist_path}',
                                     headers=self._get_headers())
         info = self._process_str_to_dict(response.text)
 
@@ -111,13 +188,12 @@ class YaDisk(FileExplorerInterface):
         Throws:
         - **InvalidTokenError**, if your token is not valid
         """
-
         addition = '' if not file_in_trash else 'trash/'
+        url = f'https://cloud-api.yandex.net/v1/disk/{addition}resources?path={dist_path}'
         response = requests.request(method='GET',
-                                    url=f'https://cloud-api.yandex.net/v1/disk/{addition}resources?path=disk:/{dist_path}',
+                                    url=url,
                                     headers=self._get_headers())
         info = self._process_str_to_dict(response.text)
-
         if response.status_code == 200:
             return info.get('type') == 'file'
         elif response.status_code == 401:
@@ -139,7 +215,7 @@ class YaDisk(FileExplorerInterface):
 
         addition = '' if not dir_in_trash else 'trash/'
         response = requests.request(method='GET',
-                                    url=f'https://cloud-api.yandex.net/v1/disk/{addition}resources?path=disk:/{dist_path}',
+                                    url=f'https://cloud-api.yandex.net/v1/disk/{addition}resources?path={dist_path}',
                                     headers=self._get_headers())
         info = self._process_str_to_dict(response.text)
 
@@ -194,7 +270,7 @@ class YaDisk(FileExplorerInterface):
         - **ServerError**, in other cases
         """
         response = requests.request(method='GET',
-                                    url=f'https://cloud-api.yandex.net/v1/disk/resources?path=disk:/{dist_path}',
+                                    url=f'https://cloud-api.yandex.net/v1/disk/resources?path={dist_path}',
                                     headers=self._get_headers())
         info = self._process_str_to_dict(response.text)
 
@@ -224,7 +300,7 @@ class YaDisk(FileExplorerInterface):
         :return: None, or exception
         """
         response = requests.request(method='DELETE',
-                                    url=f'https://cloud-api.yandex.net/v1/disk/resources?path=disk:/{dist_path}&permanently={self._bool_to_str(permanently)}',
+                                    url=f'https://cloud-api.yandex.net/v1/disk/resources?path={dist_path}&permanently={self._bool_to_str(permanently)}',
                                     headers=self._get_headers())
         if str(response.status_code)[0] == '2':  # 202, 204...
             return
@@ -238,6 +314,22 @@ class YaDisk(FileExplorerInterface):
         else:
             info = self._process_str_to_dict(response.text)
             raise ServerError(info.get('message', None))
+
+    def _get_name_for_downloading(self, dist_path: str) -> str:
+        url = f'https://cloud-api.yandex.net/v1/disk/resources?path={dist_path}'
+        response = requests.request(method='GET',
+                                    url=url,
+                                    headers=self._get_headers())
+        info = self._process_str_to_dict(response.text)
+        if response.status_code == 200:
+            if info.get('type') == 'dir':
+                return info.get('name') + '.zip'
+            else:
+                return info.get('name')
+        elif response.status_code == 401:
+            raise InvalidTokenError(additional_info=info.get('message', None))
+        else:
+            raise IncorrectDataError(additional_info=info.get('message', None))
 
     def _get_headers(self):
         return {

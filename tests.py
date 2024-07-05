@@ -1,3 +1,4 @@
+import os.path
 import time
 import unittest
 
@@ -49,7 +50,6 @@ class Tests(unittest.TestCase):
         with self.assertRaises(InvalidTokenError):
             self.not_corr_disk.dir_exists('images')
 
-
     def test_get_link(self):
         # main.cpp exists in repo
         self.assertNotEquals(self.disk.get_link('main.cpp'), None)
@@ -72,7 +72,7 @@ class Tests(unittest.TestCase):
 
         with self.assertRaises(IncorrectDataError):
             # dst not exists
-            self.disk.move_file( 'images/', 'UNKNOWED_FOLDER/UNKNOWN_FILE')
+            self.disk.move_file('images/', 'UNKNOWED_FOLDER/UNKNOWN_FILE')
 
         with self.assertRaises(InvalidTokenError):
             self.not_corr_disk.move_file('TicketRepository.png', 'folder_new/TicketRepository.png')
@@ -99,9 +99,9 @@ class Tests(unittest.TestCase):
     def test_delete_create_dir(self):
         # Real directory can be deleted
         self.assertIsNone(self.disk.delete_directory('empty_folder/'))
-        time.sleep(1) # because deleting dir can be not fast
+        time.sleep(1)  # because deleting dir can be not fast
         # Recreate directory
-        self.assertIsInstance(self.disk.create_directory('empty_folder/'), str)
+        self.assertIsInstance(self.disk.make_folder('empty_folder/'), str)
 
         # Fake directories, check exceptions
         with self.assertRaises(IncorrectDataError):
@@ -118,11 +118,39 @@ class Tests(unittest.TestCase):
         # Check permanent deleting
         self.disk.delete_directory('empty_folder/', permanently=True)
         time.sleep(1)
-        self.assertIsInstance(self.disk.create_directory('empty_folder/'), str)
+        self.assertIsInstance(self.disk.make_folder('empty_folder/'), str)
 
         # Strange test
         with self.assertRaises(IncorrectDataError):
-            self.disk.delete_directory('empty_folder'*10**4 + '/') # 400 error, because the name is too long
+            self.disk.delete_directory('empty_folder' * 10 ** 4 + '/')  # 400 error, because the name is too long
+
+    def test_downloading(self):
+        # Real file can be downloaded
+        self.assertIsNone(self.disk.download_file('Зима.jpg', '/Users/mrshrimp.it/Desktop/',
+                                                  tqdm_enabled=False))
+        # Check that file was downloaded
+        self.assertTrue(os.path.exists('/Users/mrshrimp.it/Desktop/Зима.jpg'))
+
+        # Try to download folder
+        self.assertIsNone(self.disk.download_file('folder', '/Users/mrshrimp.it/Desktop/', tqdm_enabled=False))
+        # Check that archive was downloaded
+        self.assertTrue(os.path.exists('/Users/mrshrimp.it/Desktop/folder.zip'))
+
+        # Try to download unexisted file
+        with self.assertRaises(IncorrectDataError):
+            self.disk.download_file('file.file', 'path')
+
+        # Try to download unexisted folder
+        with self.assertRaises(IncorrectDataError):
+            self.disk.download_file('folder_STR/', 'path')
+
+        # Fake token check
+        with self.assertRaises(InvalidTokenError):
+            self.not_corr_disk.download_file('folder', '/Users/mrshrimp.it/Desktop/', tqdm_enabled=False)
+
+        # Check TQDM Support and large files downloading (realize as chunk)
+        self.assertIsNone(self.disk.download_file('Хлебные крошки.mp4', '/Users/mrshrimp.it/Desktop/'))
+        self.assertTrue(os.path.exists('/Users/mrshrimp.it/Desktop/Хлебные крошки.mp4'))
 
 
 if __name__ == '__main__':
