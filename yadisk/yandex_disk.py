@@ -1,3 +1,4 @@
+import os.path
 from typing import Dict, Optional
 
 import requests
@@ -27,8 +28,33 @@ class YaDisk(FileExplorerInterface):
         # app.run("127.0.0.1", 8298, threaded=False)
         self._auth(oauth_token)
 
-    def upload_file(self, loc_path, dist_path):
-        pass
+    def upload_file(self, loc_path: str, dist_path: str,
+                    overwrite_allowed: bool = True):
+        """
+        Uploads file or folder from local disk on YaDisk.
+        You can send a path to folder (not archive). This method will upload folder to YaDisk
+        :param loc_path: a path to file or folder on your local disk
+        :param dist_path: path where you need to upload your file or folder
+        :param overwrite_allowed: True if overwriting is allowed else False
+
+        Throws:
+
+        - **InvalidTokenError**, if your token is not valid
+        - **IncorrectDataError**, if your data is incorrect (a path is incorrect, the size of file / dir if too high, etc.)
+        - **ServerError** in other cases
+        """
+        # 1. Check that file with path = loc_path really exists
+        if not os.path.exists(loc_path):
+            raise IncorrectDataError(additional_info="This file or folder does not exists.")
+
+        if not os.path.isdir(loc_path):
+            # 2. Get uploading link
+            link = self._get_link_for_uploading(dist_path + loc_path.split('/')[-1], overwrite_allowed)
+            self._upload_file(loc_path, link)
+        else:
+            if not self.dir_exists(dist_path + loc_path.split('/')[-1]):
+                self.make_folder(dist_path + loc_path.split('/')[-1])
+            self._upload_dir(loc_path, dist_path + loc_path.split('/')[-1])
 
     def download_file(self, dist_path: str, loc_path: str,
                       tqdm_enabled: bool = True):
@@ -67,7 +93,7 @@ class YaDisk(FileExplorerInterface):
 
         # 2. Download to localhost
         download_response = requests.get(url=link, stream=True)
-        with open(loc_path + '/'  + content_name, mode='wb') as saved_file:
+        with open(loc_path + '/' + content_name, mode='wb') as saved_file:
             if tqdm_enabled:
                 for chunk in tqdm.tqdm(download_response.iter_content(chunk_size=1024)):
                     saved_file.write(chunk)
@@ -103,8 +129,6 @@ class YaDisk(FileExplorerInterface):
         :param new_name: new name of restored file (optional)
         :param overwrite_allowed: True if overwriting is allowed else False
         :return: link to the restored object on Yandex Disk
-
-        TODO: not works now, because file has different name in disk and trash bin [FIX]
 
         Throws:
 
@@ -173,10 +197,10 @@ class YaDisk(FileExplorerInterface):
         """
 
         # Check that this directory exists (and it is a directory, not file)
-        if not self.dir_exists(dist_path):
+        if not self.dir_exists(dist_path + '/'):
             raise IncorrectDataError(additional_info="This directory doesn't exists.")
 
-        self._delete_inner(dist_path, permanently)
+        self._delete_inner(dist_path + '/', permanently)
 
     def file_exists(self, dist_path: str,
                     file_in_trash: bool = False) -> bool:
@@ -241,6 +265,7 @@ class YaDisk(FileExplorerInterface):
         - **IncorrectDataError**, if your data is incorrect (path is incorrect, the size of file / dir if too high, etc.)
         - **ServerError** in other cases
         """
+        dst_path = dst_path + src_path.split('/')[-1]
         response = requests.request(method='POST',
                                     url=f'https://cloud-api.yandex.net/v1/disk/resources/move?from={src_path}&path={dst_path}&overwrite={self._bool_to_str(overwrite_allowed)}',
                                     headers=self._get_headers())
@@ -330,6 +355,47 @@ class YaDisk(FileExplorerInterface):
             raise InvalidTokenError(additional_info=info.get('message', None))
         else:
             raise IncorrectDataError(additional_info=info.get('message', None))
+
+    def _get_link_for_uploading(self, dist_path: str,
+                                overwrite_allowed: bool) -> str:
+        response = requests.request(method='GET',
+                                    url=f'https://cloud-api.yandex.net/v1/disk/resources/upload?path={dist_path}&overwrite={self._bool_to_str(overwrite_allowed)}',
+                                    headers=self._get_headers())
+        info = self._process_str_to_dict(response.text)
+
+        if response.status_code == 200:
+            return info['href']
+        elif str(response.status_code)[0] == '4' and response.status_code != 401:  # 400, 403, 406...
+            raise IncorrectDataError(error_name=info.get('error', None),
+                                     additional_info=info.get('message', None))
+        elif response.status_code == 401:
+            raise InvalidTokenError(additional_info=info.get('message', None))
+        else:
+            raise ServerError(info.get('message', None))
+
+    def _upload_file(self, loc_path: str, link: str):
+        file = open(loc_path, 'rb')
+        upload_response = requests.put(link, files={'file': file})
+        file.close()
+        info_upload = self._process_str_to_dict(upload_response.text)
+        if str(upload_response.status_code)[0] == '2':
+            return
+        elif str(upload_response.status_code)[0] == '4' and upload_response.status_code != 401:  # 400, 403, 406...
+            raise IncorrectDataError(error_name=info_upload.get('error', None),
+                                     additional_info=info_upload.get('message', None))
+        elif upload_response.status_code == 401:
+            raise InvalidTokenError(additional_info=info_upload.get('message', None))
+        else:
+            raise ServerError(info_upload.get('message', None))
+
+    def _upload_dir(self, local_path: str, upload_path: str):
+        for x in sorted(os.listdir(local_path), key=lambda val: os.path.isdir(local_path + '/' + val)):
+            if os.path.isdir(local_path + '/' + x):
+                if not self.dir_exists(upload_path + '/' + x):
+                    self.make_folder(upload_path + '/' + x)
+                self._upload_dir(local_path + '/' + x, upload_path + '/' + x)
+            else:
+                self._upload_file(local_path + '/' + x, self._get_link_for_uploading(upload_path + '/' + x, True))
 
     def _get_headers(self):
         return {

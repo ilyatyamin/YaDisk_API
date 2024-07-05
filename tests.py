@@ -63,8 +63,8 @@ class Tests(unittest.TestCase):
 
     def test_move_files(self):
         # Real files, can be moved
-        self.assertIsInstance(self.disk.move_file('TicketRepository.png', 'folder_new/TicketRepository.png'), str)
-        self.assertIsInstance(self.disk.move_file('folder_new/TicketRepository.png', 'TicketRepository.png'), str)
+        self.assertIsInstance(self.disk.move_file('TicketRepository.png', 'folder_new/'), str)
+        self.assertIsInstance(self.disk.move_file('folder_new/TicketRepository.png', '/'), str)
 
         with self.assertRaises(IncorrectDataError):
             # src not exists
@@ -72,40 +72,39 @@ class Tests(unittest.TestCase):
 
         with self.assertRaises(IncorrectDataError):
             # dst not exists
-            self.disk.move_file('images/', 'UNKNOWED_FOLDER/UNKNOWN_FILE')
+            self.disk.move_file('images/', 'UNKNOWED_FOLDER/Some_DIR/')
 
         with self.assertRaises(InvalidTokenError):
-            self.not_corr_disk.move_file('TicketRepository.png', 'folder_new/TicketRepository.png')
+            self.not_corr_disk.move_file('TicketRepository.png', 'folder_new/')
 
         # Real files, can be moved
-        self.assertIsInstance(self.disk.move_file('Море.jpg', 'folder/Море.jpg'), str)
-        self.assertIsInstance(self.disk.move_file('folder/Море.jpg', 'Море.jpg', False), str)
-        self.assertIsInstance(self.disk.move_file('Москва.jpg', 'folder/yet_one_folder/Москва.jpg'), str)
-        self.assertIsInstance(self.disk.move_file('folder/yet_one_folder/Москва.jpg', 'Москва.jpg'), str)
+        self.assertIsInstance(self.disk.move_file('Море.jpg', 'folder/'), str)
+        self.assertIsInstance(self.disk.move_file('folder/Море.jpg', '/', False), str)
+        self.assertIsInstance(self.disk.move_file('Москва.jpg', 'folder/yet_one_folder/'), str)
+        self.assertIsInstance(self.disk.move_file('folder/yet_one_folder/Москва.jpg', '/'), str)
 
         # Test overwriting
         with self.assertRaises(IncorrectDataError):
-            self.disk.move_file('Зима.jpg', 'images/Зима.jpg', False)
+            self.disk.move_file('Зима.jpg', 'images/', False)
 
         # Move dirs (can be moved)
-        self.assertIsInstance(self.disk.move_file('folder', 'folder_new/folder'), str)
+        self.assertIsInstance(self.disk.move_file('folder', 'folder_new/'), str)
         # # with moving dirs all files was moved
-        # self.assertTrue(self.disk.dir_exists('folder_new/folder/yet_one_folder'))
         # with moving files all previous files was saved
         self.assertTrue(self.disk.file_exists('folder_new/SessionRepository.png'))
         # move back
-        self.assertIsInstance(self.disk.move_file('folder_new/folder', 'folder'), str)
+        self.assertIsInstance(self.disk.move_file('folder_new/folder', '/'), str)
 
     def test_delete_create_dir(self):
         # Real directory can be deleted
-        self.assertIsNone(self.disk.delete_directory('empty_folder/'))
+        self.assertIsNone(self.disk.delete_directory('empty_folder'))
         time.sleep(1)  # because deleting dir can be not fast
         # Recreate directory
-        self.assertIsInstance(self.disk.make_folder('empty_folder/'), str)
+        self.assertIsInstance(self.disk.make_folder('empty_folder'), str)
 
         # Fake directories, check exceptions
         with self.assertRaises(IncorrectDataError):
-            self.disk.delete_directory('NOT REAL DIRECTORY/')
+            self.disk.delete_directory('NOT REAL DIRECTORY')
 
         # Fake directory, path to file
         with self.assertRaises(IncorrectDataError):
@@ -113,16 +112,16 @@ class Tests(unittest.TestCase):
 
         # Incorrect token check
         with self.assertRaises(InvalidTokenError):
-            self.not_corr_disk.delete_directory('empty_folder/')
+            self.not_corr_disk.delete_directory('empty_folder')
 
         # Check permanent deleting
-        self.disk.delete_directory('empty_folder/', permanently=True)
+        self.disk.delete_directory('empty_folder', permanently=True)
         time.sleep(1)
-        self.assertIsInstance(self.disk.make_folder('empty_folder/'), str)
+        self.assertIsInstance(self.disk.make_folder('empty_folder'), str)
 
         # Strange test
         with self.assertRaises(IncorrectDataError):
-            self.disk.delete_directory('empty_folder' * 10 ** 4 + '/')  # 400 error, because the name is too long
+            self.disk.delete_directory('empty_folder' * 10 ** 4)  # 400 error, because the name is too long
 
     def test_downloading(self):
         # Real file can be downloaded
@@ -151,6 +150,23 @@ class Tests(unittest.TestCase):
         # Check TQDM Support and large files downloading (realize as chunk)
         self.assertIsNone(self.disk.download_file('Хлебные крошки.mp4', '/Users/mrshrimp.it/Desktop/'))
         self.assertTrue(os.path.exists('/Users/mrshrimp.it/Desktop/Хлебные крошки.mp4'))
+
+    def test_upload(self):
+        # Real file
+        self.assertIsNone(self.disk.upload_file('/Users/mrshrimp.it/Desktop/algebra_collooqium_23_24.pdf', '/'))
+        self.assertTrue(self.disk.file_exists('/algebra_collooqium_23_24.pdf'), str)
+
+        # Fake token check
+        with self.assertRaises(InvalidTokenError):
+            self.not_corr_disk.upload_file('/Users/mrshrimp.it/Desktop/algebra_collooqium_23_24.pdf', '/')
+
+        # Check folder upload and inner folder support
+        self.assertIsNone(self.disk.upload_file('/Users/mrshrimp.it/Desktop/untitled', '/folder/'))
+        self.assertTrue(self.disk.file_exists('folder/untitled/main.cpp'))
+        self.assertTrue(self.disk.dir_exists('folder/untitled/cmake-build-debug'))
+
+        self.disk.delete_directory('folder')
+        self.disk.delete_file('algebra_collooqium_23_24.pdf')
 
 
 if __name__ == '__main__':
