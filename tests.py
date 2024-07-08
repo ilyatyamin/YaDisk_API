@@ -4,9 +4,7 @@ import unittest
 
 from consts import *
 from yadisk.yandex_disk import *
-from yadisk.exceptions.ServerError import *
-from yadisk.exceptions.InvalidTokenError import *
-from yadisk.exceptions.IncorrectDataError import *
+from yadisk.exceptions.exceptions import *
 
 
 class Tests(unittest.TestCase):

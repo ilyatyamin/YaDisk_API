@@ -7,9 +7,9 @@ import tqdm
 from flask import Flask
 from yadisk.__constants import *
 from yadisk.__interface import *
-from yadisk.exceptions.IncorrectDataError import IncorrectDataError
-from yadisk.exceptions.InvalidTokenError import InvalidTokenError
-from yadisk.exceptions.ServerError import ServerError
+from yadisk.exceptions.exceptions import IncorrectDataError
+from yadisk.exceptions.exceptions import InvalidTokenError
+from yadisk.exceptions.exceptions import ServerError
 
 
 class YaDisk(FileExplorerInterface):
